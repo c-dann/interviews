@@ -76,7 +76,7 @@ SYSTEM_PROMPT = f"""{INTERVIEW_OUTLINE}
 
 
 # Text and voice settings
-INPUT_MODE = "text_and_voice"  # set as "text" or "voice" or "text_and_voice"
+INPUT_MODE = "text"  # set as "text" or "voice" or "text_and_voice"
 TEXT_INPUT_INSTRUCTIONS = "To use text input, please type here."
 VOICE_INPUT_INSTRUCTIONS = "To use voice input, please click 🎤 to start recording. Wait for the icon to change, then begin speaking. Click ⏹️ to stop recording. Voice input may not be supported on some browsers and devices."
 VOICE = "coral"  # or eg onyx, nova, sage, alloy (only used in full_voice_interview.py)
