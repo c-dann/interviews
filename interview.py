@@ -197,12 +197,151 @@ if "voice" in config.INPUT_MODE:
 # 2. Display first message or previous conversation
 #
 
-# Define a container for the chat history
+# Define containers for the survey controls and chat history. The survey container
+# is intentionally created first so the active slider/radio block stays above the
+# follow-up prompt during each section.
+survey_container = st.container()
 transcript_container = st.container()
+
+INTRO_MESSAGE = (
+    "Hello! I'm glad to have the opportunity to speak with you today about democracy and political life. "
+    "Thank you for taking part in this interview. I'm interested in your views in your own words."
+)
+
+IMPORTANCE_QUESTION = (
+    "How important is it for you to live in a country that is governed democratically? "
+    "On this scale where 0 means it is not at all important and 10 means absolutely important, "
+    "what position would you choose?"
+)
+
+SATISFACTION_QUESTION = (
+    "On the whole, are you very satisfied, fairly satisfied, not very satisfied, "
+    "or not at all satisfied with the way democracy works in your country?"
+)
+SATISFACTION_OPTIONS = [
+    "Very satisfied",
+    "Fairly satisfied",
+    "Not very satisfied",
+    "Not at all satisfied",
+]
+
+PREFERENCE_QUESTION = (
+    "Please tell me whether you strongly agree, agree, neither agree nor disagree, disagree, "
+    "or strongly disagree with the following statement: Democracy may have problems, "
+    "but it is better than any other form of government."
+)
+PREFERENCE_OPTIONS = [
+    "Strongly agree",
+    "Agree",
+    "Neither agree nor disagree",
+    "Disagree",
+    "Strongly disagree",
+]
+
+# These are the app-managed closed-ended survey question/answer pairs. They are
+# kept in messages for the transcript and model context, but hidden from the chat
+# display so the respondent sees the active control instead of a chat echo.
+APP_MANAGED_MESSAGE_INDEXES = {0, 1, 4, 5, 8, 9}
+
+
+def render_intro_message():
+    with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+        st.markdown(INTRO_MESSAGE)
+
+
+def render_importance_slider(value=5, disabled=False, key="importance_slider"):
+    return st.slider(
+        IMPORTANCE_QUESTION,
+        min_value=0,
+        max_value=10,
+        value=value,
+        step=1,
+        disabled=disabled,
+        key=key,
+    )
+
+
+def render_locked_current_survey_control():
+    stage = st.session_state.get("democracy_stage")
+
+    if stage == "importance_followup" and "democracy_importance" in st.session_state:
+        with survey_container:
+            render_intro_message()
+            st.markdown("### Importance Of Democracy")
+            render_importance_slider(
+                value=st.session_state.democracy_importance,
+                disabled=True,
+                key="importance_locked",
+            )
+
+    elif stage == "satisfaction_followup" and "democracy_satisfaction" in st.session_state:
+        with survey_container:
+            st.markdown("### Satisfaction With Democracy")
+            st.radio(
+                SATISFACTION_QUESTION,
+                SATISFACTION_OPTIONS,
+                index=SATISFACTION_OPTIONS.index(st.session_state.democracy_satisfaction),
+                disabled=True,
+                key="satisfaction_locked",
+            )
+
+    elif stage == "preference_followup" and "democracy_preference" in st.session_state:
+        with survey_container:
+            st.markdown("### Democracy Compared To Other Forms Of Government")
+            st.radio(
+                "Democracy may have problems, but it is better than any other form of government.",
+                PREFERENCE_OPTIONS,
+                index=PREFERENCE_OPTIONS.index(st.session_state.democracy_preference),
+                disabled=True,
+                key="preference_locked",
+            )
+
+
+def infer_democracy_stage(messages):
+    message_count = len(messages)
+
+    if message_count == 0:
+        return "importance_question"
+    if message_count <= 3:
+        return "importance_followup"
+    if message_count == 4:
+        return "satisfaction_question"
+    if message_count <= 7:
+        return "satisfaction_followup"
+    if message_count == 8:
+        return "preference_question"
+    if message_count <= 11:
+        return "preference_followup"
+    return "summary"
+
+
+def restore_democracy_answers_from_messages():
+    messages = st.session_state.messages
+
+    if "democracy_importance" not in st.session_state and len(messages) > 1:
+        try:
+            st.session_state.democracy_importance = int(
+                messages[1]["content"].split(" out of 10")[0]
+            )
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    if "democracy_satisfaction" not in st.session_state and len(messages) > 5:
+        satisfaction = messages[5].get("content")
+        if satisfaction in SATISFACTION_OPTIONS:
+            st.session_state.democracy_satisfaction = satisfaction
+
+    if "democracy_preference" not in st.session_state and len(messages) > 9:
+        preference = messages[9].get("content")
+        if preference in PREFERENCE_OPTIONS:
+            st.session_state.democracy_preference = preference
+
+
+restore_democracy_answers_from_messages()
 
 # Track which part of the staged democracy interview is currently active.
 if "democracy_stage" not in st.session_state:
-    st.session_state.democracy_stage = "importance_question"
+    st.session_state.democracy_stage = infer_democracy_stage(st.session_state.messages)
 
 # First closed-ended item: importance of democracy.
 if (
@@ -210,44 +349,28 @@ if (
     and st.session_state.interview_active
     and st.session_state.democracy_stage == "importance_question"
 ):
-    st.markdown("### Democratic Attitudes")
-    st.markdown("Please answer this standard survey question before starting the conversation.")
+    with survey_container:
+        render_intro_message()
+        st.markdown("### Importance Of Democracy")
 
-    with st.form("importance_form"):
-        democracy_importance = st.slider(
-            "How important is it for you to live in a country that is governed democratically? "
-            "On this scale where 0 means it is not at all important and 10 means absolutely important, "
-            "what position would you choose?",
-            min_value=0,
-            max_value=10,
-            value=5,
-            step=1,
-        )
+        with st.form("importance_form"):
+            democracy_importance = render_importance_slider(
+                value=5,
+                key="importance_form_slider",
+            )
 
-        submitted = st.form_submit_button("Start conversation")
+            submitted = st.form_submit_button("Continue")
 
     if submitted:
         st.session_state.democracy_importance = democracy_importance
         st.session_state.democracy_stage = "importance_followup"
 
-        opening_message = (
-            "Hello! I'm glad to have the opportunity to speak with you today about democracy and political life. "
-            "Thank you for taking part in this interview. I'm interested in your views in your own words.\n\n"
-            f"You selected {democracy_importance} out of 10 for how important it is to live in a country that is governed democratically. "
-            "What were you thinking about when you chose that answer?"
-        )
+        opening_message = "What were you thinking about when you chose that answer?"
 
         st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": (
-                    "How important is it for you to live in a country that is governed democratically? "
-                    "On this scale where 0 means it is not at all important and 10 means absolutely important, "
-                    "what position would you choose?"
-                ),
-            },
+            {"role": "assistant", "content": IMPORTANCE_QUESTION},
             {"role": "user", "content": f"{democracy_importance} out of 10"},
-            {"role": "assistant", "content": opening_message}
+            {"role": "assistant", "content": opening_message},
         ]
 
         save_backup(
@@ -258,6 +381,8 @@ if (
         st.rerun()
 
     st.stop()
+
+render_locked_current_survey_control()
 
 # In case the interview history is still empty, pass system prompt to model and
 # generate and display the first message
@@ -281,7 +406,10 @@ if not st.session_state.messages and st.session_state.interview_active:
 else:
     with transcript_container:
         # Don't display system messages
-        for message in st.session_state.messages:
+        for message_index, message in enumerate(st.session_state.messages):
+            if message_index in APP_MANAGED_MESSAGE_INDEXES:
+                continue
+
             if message["role"] == "assistant":
                 avatar = config.AVATAR_INTERVIEWER
             elif message["role"] == "user":
@@ -300,22 +428,17 @@ if (
     st.session_state.interview_active
     and st.session_state.get("democracy_stage") == "satisfaction_question"
 ):
-    st.divider()
-    st.markdown("### Satisfaction With Democracy")
+    with survey_container:
+        st.markdown("### Satisfaction With Democracy")
 
-    with st.form("satisfaction_form"):
-        democracy_satisfaction = st.radio(
-            "On the whole, how satisfied are you with the way democracy works in your country?",
-            [
-                "Very satisfied",
-                "Fairly satisfied",
-                "Not very satisfied",
-                "Not at all satisfied",
-            ],
-            index=None,
-        )
+        with st.form("satisfaction_form"):
+            democracy_satisfaction = st.radio(
+                SATISFACTION_QUESTION,
+                SATISFACTION_OPTIONS,
+                index=None,
+            )
 
-        submitted = st.form_submit_button("Continue")
+            submitted = st.form_submit_button("Continue")
 
     if submitted:
         if democracy_satisfaction is None:
@@ -327,20 +450,11 @@ if (
 
         st.session_state.messages.extend(
             [
-                {
-                    "role": "assistant",
-                    "content": (
-                        "On the whole, are you very satisfied, fairly satisfied, not very satisfied, "
-                        "or not at all satisfied with the way democracy works in your country?"
-                    ),
-                },
+                {"role": "assistant", "content": SATISFACTION_QUESTION},
                 {"role": "user", "content": democracy_satisfaction},
                 {
                     "role": "assistant",
-                    "content": (
-                        f"You selected '{democracy_satisfaction}' for how satisfied you are with the way democracy "
-                        "works in your country. What were you thinking of when you responded that way?"
-                    ),
+                    "content": "What were you thinking of when you responded that way?",
                 },
             ]
         )
@@ -360,23 +474,17 @@ if (
     st.session_state.interview_active
     and st.session_state.get("democracy_stage") == "preference_question"
 ):
-    st.divider()
-    st.markdown("### Democracy Compared To Other Forms Of Government")
+    with survey_container:
+        st.markdown("### Democracy Compared To Other Forms Of Government")
 
-    with st.form("preference_form"):
-        democracy_preference = st.radio(
-            "Democracy may have problems, but it is better than any other form of government.",
-            [
-                "Strongly agree",
-                "Agree",
-                "Neither agree nor disagree",
-                "Disagree",
-                "Strongly disagree",
-            ],
-            index=None,
-        )
+        with st.form("preference_form"):
+            democracy_preference = st.radio(
+                "Democracy may have problems, but it is better than any other form of government.",
+                PREFERENCE_OPTIONS,
+                index=None,
+            )
 
-        submitted = st.form_submit_button("Continue")
+            submitted = st.form_submit_button("Continue")
 
     if submitted:
         if democracy_preference is None:
@@ -388,21 +496,11 @@ if (
 
         st.session_state.messages.extend(
             [
-                {
-                    "role": "assistant",
-                    "content": (
-                        "Please tell me whether you strongly agree, agree, neither agree nor disagree, disagree, "
-                        "or strongly disagree with the following statement: Democracy may have problems, "
-                        "but it is better than any other form of government."
-                    ),
-                },
+                {"role": "assistant", "content": PREFERENCE_QUESTION},
                 {"role": "user", "content": democracy_preference},
                 {
                     "role": "assistant",
-                    "content": (
-                        f"You selected '{democracy_preference}' for the statement that democracy may have problems, "
-                        "but is better than any other form of government. What were you thinking about when you chose that answer?"
-                    ),
+                    "content": "What were you thinking about when you chose that answer?",
                 },
             ]
         )
