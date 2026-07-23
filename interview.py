@@ -101,7 +101,7 @@ if "start_time_current_login" not in st.session_state:
     st.session_state.start_time_current_login = time.time()
 
 if "messages" not in st.session_state:
-    if interview_previously_completed and allow_repeat_demo_interviews:
+    if allow_repeat_demo_interviews:
         st.session_state.messages = []
         st.session_state.start_time = time.time()
         st.session_state.times_previous_attempts = []
@@ -180,8 +180,14 @@ MAX_FOLLOWUPS_PER_SECTION = getattr(config, "MAX_FOLLOWUPS_PER_SECTION", 2)
 
 SECTIONS = [
     {
+        "id": "meaning",
+        "title": "Part 1: Meaning Of Democracy",
+        "question": "What does democracy mean to you?",
+        "type": "text",
+    },
+    {
         "id": "importance",
-        "title": "Part 1: Importance Of Democracy",
+        "title": "Part 2: Importance Of Democracy",
         "question": (
             "How important is it for you to live in a country that is governed democratically? "
             "On this scale where 0 means it is not at all important and 10 means absolutely important, "
@@ -192,7 +198,7 @@ SECTIONS = [
     },
     {
         "id": "satisfaction",
-        "title": "Part 2: Satisfaction With Democracy",
+        "title": "Part 3: Satisfaction With Democracy",
         "question": (
             "On the whole, are you very satisfied, fairly satisfied, not very satisfied, "
             "or not at all satisfied with the way democracy works in your country?"
@@ -207,7 +213,7 @@ SECTIONS = [
     },
     {
         "id": "preference",
-        "title": "Part 3: Democracy Compared To Other Forms Of Government",
+        "title": "Part 4: Democracy Compared To Other Forms Of Government",
         "question": (
             "Democracy may have problems, but it is better than any other form of government."
         ),
@@ -330,7 +336,7 @@ def final_open_question_has_been_answered():
 
 def current_stage():
     if not st.session_state.messages:
-        return "importance_question"
+        return "meaning_question"
 
     if all_section_followups_complete():
         if final_open_question_index() is None:
@@ -364,7 +370,7 @@ def append_closed_answer(section, answer):
     answer_text = (
         f"{answer}{section.get('answer_suffix', '')}"
         if section["type"] == "slider"
-        else answer
+        else str(answer).strip()
     )
 
     st.session_state.messages.extend(
@@ -381,6 +387,10 @@ def append_closed_answer(section, answer):
 
 def render_closed_question(section):
     transition_message = {
+        "importance": (
+            "Thanks, that's helpful. We'll now move to the next part of the conversation, "
+            "about how important it is to you to live in a country that is governed democratically."
+        ),
         "satisfaction": (
             "Thanks for answering those questions. We'll now move to the next part "
             "of the conversation, about how satisfied you are with the way democracy "
@@ -400,7 +410,9 @@ def render_closed_question(section):
     st.markdown(f"### {section['title']}")
 
     with st.form(f"{section['id']}_closed_form"):
-        if section["type"] == "slider":
+        if section["type"] == "text":
+            answer = st.text_area(section["question"])
+        elif section["type"] == "slider":
             answer = st.slider(
                 section["question"],
                 min_value=0,
@@ -420,8 +432,8 @@ def render_closed_question(section):
         submitted = st.form_submit_button("Continue")
 
     if submitted:
-        if answer is None:
-            st.warning("Please select an answer before continuing.")
+        if answer is None or not str(answer).strip():
+            st.warning("Please write or select an answer before continuing.")
             st.stop()
 
         append_closed_answer(section, answer)
@@ -432,7 +444,14 @@ def render_locked_control(section):
     st.markdown(f"### {section['title']}")
     answer = closed_answer(section)
 
-    if section["type"] == "slider":
+    if section["type"] == "text":
+        st.text_area(
+            section["question"],
+            value=answer or "",
+            disabled=True,
+            key=f"{section['id']}_locked_text",
+        )
+    elif section["type"] == "slider":
         try:
             value = int(str(answer).split(" out of 10")[0])
         except (TypeError, ValueError):
@@ -476,6 +495,7 @@ def normalize_text(text):
 def asks_closed_survey_item(message):
     normalized = normalize_text(message)
     closed_item_markers = [
+        "what does democracy mean to you",
         "how important is it for you to live in a country that is governed democratically",
         "very satisfied, fairly satisfied, not very satisfied",
         "not at all satisfied with the way democracy works",
@@ -488,6 +508,17 @@ def asks_closed_survey_item(message):
 def fallback_followup_for_section(section):
     answer = closed_answer(section)
     answered = followup_answer_count(section)
+
+    if section["id"] == "meaning":
+        if answered == 0:
+            return (
+                "When you think about democracy that way, what feels most important "
+                "about it in ordinary political life?"
+            )
+        return (
+            "Could you give a concrete example of what would make a country feel "
+            "more or less democratic to you?"
+        )
 
     if section["id"] == "importance":
         if answered == 0:
