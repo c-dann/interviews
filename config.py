@@ -159,19 +159,9 @@ SYSTEM_PROMPT = f"""{INTERVIEW_OUTLINE}
 {CODES}"""
 
 
-# Text and voice settings
-INPUT_MODE = "text"  # set as "text" or "voice" or "text_and_voice"
-TEXT_INPUT_INSTRUCTIONS = "To use text input, please type here."
-VOICE_INPUT_INSTRUCTIONS = "To use voice input, please click 🎤 to start recording. Wait for the icon to change, then begin speaking. Click ⏹️ to stop recording. Voice input may not be supported on some browsers and devices."
-VOICE = "coral"  # or eg onyx, nova, sage, alloy (only used in full_voice_interview.py)
-
-
 # Interviewer API and model setup
 API = "openai"  # can be "openai", "anthropic", "google", or "azure"
-# (full_voice_interview.py currently only supports "openai")
 MODEL = "gpt-4.1-2025-04-14"  # make sure to set API accordingly
-# For voice-only interviews via `streamlit run full_voice_interview.py`, set e.g.
-# MODEL = "gpt-audio-2025-08-28"
 
 
 # Additional API arguments
@@ -188,15 +178,6 @@ CONVERSATIONAL_PAUSE_SECONDS = 0.7
 CONVERSATIONAL_TEXT_DELAY_SECONDS = 0.03
 CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = 0.12
 TYPEWRITER_MAX_CHARS = 900
-ENABLE_INTERVIEWER_TTS = True
-AUTOPLAY_INTERVIEWER_AUDIO = True
-TTS_MODEL = "gpt-4o-mini-tts"
-TTS_VOICE = "coral"
-TTS_SPEED = 1.05
-TTS_INSTRUCTIONS = (
-    "Speak warmly and naturally, like a thoughtful qualitative interviewer. "
-    "Use a natural conversational pace."
-)
 ALLOW_REPEAT_DEMO_INTERVIEWS = True
 #
 # The following are a few examples for different APIs and models:
@@ -219,13 +200,6 @@ ALLOW_REPEAT_DEMO_INTERVIEWS = True
 # API = "azure" and model = "Llama-4-Maverick-17B-128E-Instruct-FP8"
 # ADDITIONAL_API_KWARGS = {"max_tokens": 4096} to set the maximum tokens for the
 # language model response
-
-
-# Transcription model (the transcription of optional voice input always uses the OpenAI
-# API in the code here, but other speech-to-text APIs and models could be integrated
-# similarly)
-MODEL_TRANSCRIPTION = "whisper-1"  # or e.g. gpt-4o-transcribe or gpt-4o-mini-transcribe
-# to increase transcription accuracy
 
 
 # Directories
