@@ -256,18 +256,19 @@ FINAL_OPEN_MESSAGE = (
 )
 
 MAX_FOLLOWUPS_PER_SECTION = getattr(config, "MAX_FOLLOWUPS_PER_SECTION", 2)
+CONVERSATIONAL_PAUSE_SECONDS = getattr(config, "CONVERSATIONAL_PAUSE_SECONDS", 0.7)
 
 SECTIONS = [
     {
         "id": "meaning",
-        "title": "Part 1: Meaning Of Democracy",
+        "title": "What Democracy Means",
         "question": "What does democracy mean to you?",
         "type": "text",
         "max_followups": 2,
     },
     {
         "id": "importance",
-        "title": "Part 2: Importance Of Democracy",
+        "title": "How Much Democracy Matters",
         "question": (
             "How important is it for you to live in a country that is governed democratically? "
             "On this scale where 0 means it is not at all important and 10 means absolutely important, "
@@ -277,12 +278,13 @@ SECTIONS = [
         "answer_suffix": " out of 10",
         "max_followups": 2,
         "transition": (
-            "Thank you. I'd now like to ask about how important democracy is to you personally."
+            "That helps me understand how you are thinking about democracy as an idea. "
+            "I would like to turn now to how much that matters to you personally."
         ),
     },
     {
         "id": "satisfaction",
-        "title": "Part 3: Satisfaction With Democracy",
+        "title": "How Democracy Is Working",
         "question": (
             "On the whole, are you very satisfied, fairly satisfied, not very satisfied, "
             "or not at all satisfied with the way democracy works in your country?"
@@ -296,12 +298,13 @@ SECTIONS = [
         ],
         "max_followups": 2,
         "transition": (
-            "Thanks. Now I'd like to turn from the idea of democracy to how democracy is actually working."
+            "Thanks. I would like to shift from democracy as a value to how democracy feels "
+            "in practice where you live."
         ),
     },
     {
         "id": "satisfaction_drivers",
-        "title": "Part 4: What Shapes Satisfaction",
+        "title": "What Shapes Your View",
         "question": (
             "Which areas most shaped your answer about how democracy works in your country? "
             "Feel free to choose among the items listed below, or you can type a response in the text box."
@@ -321,12 +324,13 @@ SECTIONS = [
         "text_label": "Other areas or details you had in mind:",
         "max_followups": 3,
         "transition": (
-            "Thanks. I'd now like to get a bit more specific about what shaped that view."
+            "That gives me the broad picture. I would like to get a little more concrete about "
+            "what shaped that view."
         ),
     },
     {
         "id": "satisfaction_time",
-        "title": "Part 5: Satisfaction Over Time",
+        "title": "Whether Your View Has Changed",
         "question": (
             "Has your satisfaction with the way democracy works in your country changed over time, "
             "or has it been fairly stable? Please describe what has shaped this view."
@@ -334,12 +338,13 @@ SECTIONS = [
         "type": "text",
         "max_followups": 2,
         "transition": (
-            "That's helpful. I'd now like to ask whether your views have changed over time."
+            "That is helpful. I am also interested in whether this is a newer view for you, "
+            "or something that has been fairly steady."
         ),
     },
     {
         "id": "effectiveness",
-        "title": "Part 6: Democracy Versus Effectiveness",
+        "title": "Democracy And Delivery",
         "question": (
             "What is more important to you: that a government be democratic even if it is not "
             "effective, or that it be effective even if it is not democratic?"
@@ -351,13 +356,13 @@ SECTIONS = [
         ],
         "max_followups": 3,
         "transition": (
-            "Thanks for explaining that. We'll now turn to a possible trade-off between "
-            "democratic government and effective government."
+            "Thanks for explaining that. I want to ask about a tradeoff people sometimes feel "
+            "between democratic process and getting things done."
         ),
     },
     {
         "id": "regime_preference",
-        "title": "Part 7: Regime Preference",
+        "title": "Democracy And Alternatives",
         "question": (
             "Which of the following statements do you agree with most? Choose one of the three options."
         ),
@@ -369,13 +374,13 @@ SECTIONS = [
         ],
         "max_followups": 3,
         "transition": (
-            "Thank you. I'd now like to ask more directly how you think about democracy compared "
-            "with other forms of government."
+            "That helps clarify how you think about process and results. I would like to ask more "
+            "directly how you think about democracy compared with other forms of government."
         ),
     },
     {
         "id": "red_lines",
-        "title": "Part 8: Democratic Red Lines",
+        "title": "Democratic Boundaries",
         "question": (
             "Are there any things democratic leaders should not do, even if they promise better results? "
             "Feel free to choose among the items listed below, or type your own answer."
@@ -396,8 +401,8 @@ SECTIONS = [
         "text_label": "Other things democratic leaders should not do:",
         "max_followups": 3,
         "transition": (
-            "Thanks. For the last main part of the interview, I'd like to ask about boundaries "
-            "for democratic leaders."
+            "Thanks. For the last main part of the interview, I would like to ask where you draw "
+            "the line for democratic leaders."
         ),
     },
 ]
@@ -759,10 +764,10 @@ def fallback_followup_for_section(section):
     if section["id"] == "meaning":
         if answered == 0:
             return (
-                "When you use the word democracy, what kinds of things are you thinking of?"
+                "That is a helpful starting point. When you use the word democracy, what kinds of things are you thinking of?"
             )
         return (
-            "Does democracy mean something mainly political to you, or does it also connect to everyday life?"
+            "I see. Does democracy mean something mainly political to you, or does it also connect to everyday life?"
         )
 
     if section["id"] == "importance":
@@ -771,7 +776,7 @@ def fallback_followup_for_section(section):
                 f"You chose {answer}. What makes democracy feel that important, or not important, to you?"
             )
         return (
-            "Is your answer more about how decisions are made, the results government produces, or both?"
+            "That helps explain your rating. Is your answer more about how decisions are made, the results government produces, or both?"
         )
 
     if section["id"] == "satisfaction":
@@ -781,81 +786,84 @@ def fallback_followup_for_section(section):
                 "your country were most on your mind?"
             )
         return (
-            "Is that based mostly on recent experiences, or on a longer-term view of how democracy works?"
+            "That gives me a better sense of what you were weighing. Is that based mostly on recent experiences, or on a longer-term view of how democracy works?"
         )
 
     if section["id"] == "satisfaction_drivers":
         if answered == 0:
-            return "Which of those areas mattered most for your view, and why?"
+            return "Those are useful anchors. Which of those areas mattered most for your view, and why?"
         if answered == 1:
             return (
-                "Is this based on something you personally experienced, something people around you "
+                "That makes sense. Is this based on something you personally experienced, something people around you "
                 "experienced, or a broader impression?"
             )
         return (
-            "What would a better response from government look like to you?"
+            "I understand the concern a bit better now. What would a better response from government look like to you?"
         )
 
     if section["id"] == "satisfaction_time":
         if answered == 0:
-            return "What experiences or events made your view change, or helped it stay the same?"
+            return "That helps place your view in time. What experiences or events made your view change, or helped it stay the same?"
         return (
-            "Was this shaped mostly by recent events, or by things you learned or experienced earlier in life?"
+            "I see. Was this shaped mostly by recent events, or by things you learned or experienced earlier in life?"
         )
 
     if section["id"] == "effectiveness":
         if answered == 0:
-            return "What makes that feel like the better option to you?"
+            return "That choice gets at an important tradeoff. What makes that feel like the better option to you?"
         if answered == 1:
             return (
-                "Thinking about the issues you raised earlier, what would feel like the right balance "
+                "That helps clarify your instinct. Thinking about the issues you raised earlier, what would feel like the right balance "
                 "between getting problems solved and keeping decisions democratic?"
             )
         if "effective even if it is not democratic" in str(answer).lower():
             return (
-                "What would worry you, if anything, about a government solving problems without democratic checks?"
+                "I can see why effectiveness matters in that case. What would worry you, if anything, about a government solving problems without democratic checks?"
             )
-        return "When does a slower democratic process still feel worth preserving to you?"
+        return "I can see that democratic process still matters to you. When does a slower democratic process still feel worth preserving?"
 
     if section["id"] == "regime_preference":
         answer_text = str(answer).lower()
         if "authoritarian" in answer_text:
             if answered == 0:
-                return "What kinds of circumstances would make an authoritarian government seem preferable?"
+                return "That is helpful to understand. What kinds of circumstances would make an authoritarian government seem preferable?"
             if answered == 1:
-                return "What would you expect that kind of government to do better?"
+                return "I see the situation you have in mind. What would you expect that kind of government to do better?"
             return (
-                "Some people worry that authoritarian governments may act faster but may also restrict "
+                "That helps explain the appeal. Some people worry that authoritarian governments may act faster but may also restrict "
                 "people's freedoms or rights. How do you think about that tradeoff?"
             )
         if "no difference" in answer_text:
             if answered == 0:
                 return (
-                    "What makes the type of political system feel like it does not make much difference "
+                    "That is useful to hear. What makes the type of political system feel like it does not make much difference "
                     "for people like you?"
                 )
             if answered == 1:
-                return "What, if anything, could make the type of political system matter more to you?"
-            return "Are there any political rights or protections that would still matter to you personally?"
+                return "I understand that sense of distance from politics. What, if anything, could make the type of political system matter more to you?"
+            return "That helps explain your view. Are there any political rights or protections that would still matter to you personally?"
         if answered == 0:
-            return "What makes democracy preferable to you, even when it has problems?"
+            return "That is a clear preference. What makes democracy preferable to you, even when it has problems?"
         if answered == 1:
-            return "Are there situations where democracy's problems make that commitment harder for you?"
-        return "What would make you most concerned that democracy was being weakened?"
+            return "I hear that you still see real problems. Are there situations where democracy's problems make that commitment harder for you?"
+        return "That helps me understand your commitment to democracy. What would make you most concerned that democracy was being weakened?"
 
     if section["id"] == "red_lines":
         if answered == 0:
-            return "Which of these feels most important to you, and why?"
+            return "Those choices help show where your boundaries are. Which of these feels most important to you, and why?"
         if answered == 1:
             return (
-                "Looking back at your earlier answers, how do you think about the boundary between "
+                "That boundary is useful to think through. Looking back at your earlier answers, how do you think about the boundary between "
                 "wanting better results and preserving democratic rules?"
             )
         return (
-            "What would go too far for you, even if a democratic leader promised better results?"
+            "I see the line you are drawing. What would go too far for you, even if a democratic leader promised better results?"
         )
 
-    return "Could you tell me a little more about what shaped that answer?"
+    return (
+        "That is helpful. Thinking about the question here though, what part of "
+        "that feels most important to you?"
+    )
 
 
 def maybe_handle_closing_code(message_interviewer):
@@ -884,6 +892,9 @@ def maybe_handle_closing_code(message_interviewer):
 def generate_ai_message():
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         message_placeholder = st.empty()
+        message_placeholder.markdown("Let me think about that for a moment...")
+        time.sleep(CONVERSATIONAL_PAUSE_SECONDS)
+        message_placeholder.empty()
         message_interviewer = stream_response(
             client=client,
             client_kwargs=api_kwargs,
