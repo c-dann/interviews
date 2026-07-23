@@ -5,6 +5,7 @@
 
 
 import os
+import base64
 import hashlib
 import time
 from copy import deepcopy
@@ -265,6 +266,7 @@ CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = getattr(
     config, "CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS", 0.12
 )
 ENABLE_INTERVIEWER_TTS = getattr(config, "ENABLE_INTERVIEWER_TTS", True)
+AUTOPLAY_INTERVIEWER_AUDIO = getattr(config, "AUTOPLAY_INTERVIEWER_AUDIO", True)
 TTS_MODEL = getattr(config, "TTS_MODEL", "gpt-4o-mini-tts")
 TTS_VOICE = getattr(config, "TTS_VOICE", getattr(config, "VOICE", "coral"))
 TTS_SPEED = getattr(config, "TTS_SPEED", 0.95)
@@ -846,7 +848,18 @@ def generate_interviewer_audio(message_text):
 def render_interviewer_audio(message_text, key_prefix):
     audio_bytes = generate_interviewer_audio(message_text)
     if audio_bytes:
-        st.audio(audio_bytes, format="audio/mp3")
+        if AUTOPLAY_INTERVIEWER_AUDIO:
+            audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+            st.markdown(
+                f"""
+                <audio controls autoplay playsinline style="width: 100%;">
+                    <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
+                </audio>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.audio(audio_bytes, format="audio/mp3")
     elif ENABLE_INTERVIEWER_TTS and config.API == "openai":
         st.caption("Audio unavailable for this message.")
 
