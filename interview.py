@@ -184,6 +184,7 @@ SECTIONS = [
         "title": "Part 1: Meaning Of Democracy",
         "question": "What does democracy mean to you?",
         "type": "text",
+        "max_followups": 2,
     },
     {
         "id": "importance",
@@ -195,6 +196,10 @@ SECTIONS = [
         ),
         "type": "slider",
         "answer_suffix": " out of 10",
+        "max_followups": 2,
+        "transition": (
+            "Thank you. I'd now like to ask about how important democracy is to you personally."
+        ),
     },
     {
         "id": "satisfaction",
@@ -210,28 +215,117 @@ SECTIONS = [
             "Not very satisfied",
             "Not at all satisfied",
         ],
+        "max_followups": 2,
+        "transition": (
+            "Thanks. Now I'd like to turn from the idea of democracy to how democracy is actually working."
+        ),
     },
     {
-        "id": "preference",
-        "title": "Part 4: Democracy Compared To Other Forms Of Government",
+        "id": "satisfaction_drivers",
+        "title": "Part 4: What Shapes Satisfaction",
         "question": (
-            "Democracy may have problems, but it is better than any other form of government."
+            "Which areas most shaped your answer about how democracy works in your country? "
+            "Feel free to choose among the items listed below, or you can type a response in the text box."
+        ),
+        "type": "checkboxes_text",
+        "options": [
+            "Economy / jobs / inflation",
+            "Crime and public safety",
+            "Corruption",
+            "Infrastructure",
+            "Public services",
+            "Inequality",
+            "Rights and freedoms",
+            "Political representation",
+            "Trust in institutions",
+        ],
+        "text_label": "Other areas or details you had in mind:",
+        "max_followups": 3,
+        "transition": (
+            "Thanks. I'd now like to get a bit more specific about what shaped that view."
+        ),
+    },
+    {
+        "id": "satisfaction_time",
+        "title": "Part 5: Satisfaction Over Time",
+        "question": (
+            "Has your satisfaction with the way democracy works in your country changed over time, "
+            "or has it been fairly stable? Please describe what has shaped this view."
+        ),
+        "type": "text",
+        "max_followups": 2,
+        "transition": (
+            "That's helpful. I'd now like to ask whether your views have changed over time."
+        ),
+    },
+    {
+        "id": "effectiveness",
+        "title": "Part 6: Democracy Versus Effectiveness",
+        "question": (
+            "What is more important to you: that a government be democratic even if it is not "
+            "effective, or that it be effective even if it is not democratic?"
         ),
         "type": "radio",
         "options": [
-            "Strongly agree",
-            "Agree",
-            "Neither agree nor disagree",
-            "Disagree",
-            "Strongly disagree",
+            "That the government be democratic even if it is not effective",
+            "That the government be effective even if it is not democratic",
         ],
-        "transcript_question": (
-            "Please tell me whether you strongly agree, agree, neither agree nor disagree, disagree, "
-            "or strongly disagree with the following statement: Democracy may have problems, "
-            "but it is better than any other form of government."
+        "max_followups": 3,
+        "transition": (
+            "Thanks for explaining that. We'll now turn to a possible trade-off between "
+            "democratic government and effective government."
+        ),
+    },
+    {
+        "id": "regime_preference",
+        "title": "Part 7: Regime Preference",
+        "question": (
+            "Which of the following statements do you agree with most? Choose one of the three options."
+        ),
+        "type": "radio",
+        "options": [
+            "Democracy is preferable to any other form of government.",
+            "In some circumstances, an authoritarian government may be preferable to a democratic one.",
+            "For people like me, it makes no difference whether the regime is democratic or not.",
+        ],
+        "max_followups": 3,
+        "transition": (
+            "Thank you. I'd now like to ask more directly how you think about democracy compared "
+            "with other forms of government."
+        ),
+    },
+    {
+        "id": "red_lines",
+        "title": "Part 8: Democratic Red Lines",
+        "question": (
+            "Are there any things democratic leaders should not do, even if they promise better results? "
+            "Feel free to choose among the items listed below, or type your own answer."
+        ),
+        "type": "checkboxes_text",
+        "options": [
+            "Cancel or ignore elections",
+            "Stop opposition parties from competing",
+            "Pressure or control the courts",
+            "Restrict the media",
+            "Limit people's right to criticize the government",
+            "Ignore legal limits on their power",
+            "Use force against peaceful opponents",
+            "Refuse to leave office after losing an election",
+            "None of these are absolute",
+        ],
+        "exclusive_options": ["None of these are absolute"],
+        "text_label": "Other things democratic leaders should not do:",
+        "max_followups": 3,
+        "transition": (
+            "Thanks. For the last main part of the interview, I'd like to ask about boundaries "
+            "for democratic leaders."
         ),
     },
 ]
+
+
+def followups_required(section):
+    return section.get("max_followups", MAX_FOLLOWUPS_PER_SECTION)
 
 
 def get_section(section_id):
@@ -278,7 +372,7 @@ def section_messages(section):
     if start_index is None or end_index is None:
         return []
 
-    # Hide the app-managed closed-ended survey question and answer from the
+    # Hide the app-managed survey item and anchor answer from the
     # respondent-facing chat; keep the conversational follow-ups.
     return st.session_state.messages[start_index + 2 : end_index]
 
@@ -300,7 +394,7 @@ def followup_answer_count(section):
 def all_section_followups_complete():
     return all(
         section_start_index(section) is not None
-        and followup_answer_count(section) >= MAX_FOLLOWUPS_PER_SECTION
+        and followup_answer_count(section) >= followups_required(section)
         for section in SECTIONS
     )
 
@@ -349,7 +443,7 @@ def current_stage():
         if section_start_index(section) is None:
             return f"{section['id']}_question"
 
-        if followup_answer_count(section) < MAX_FOLLOWUPS_PER_SECTION:
+        if followup_answer_count(section) < followups_required(section):
             return f"{section['id']}_followup"
 
         if index + 1 < len(SECTIONS) and section_start_index(SECTIONS[index + 1]) is None:
@@ -361,17 +455,27 @@ def current_stage():
 def active_section():
     stage = current_stage()
     for section in SECTIONS:
-        if stage.startswith(section["id"]):
+        if stage in (f"{section['id']}_question", f"{section['id']}_followup"):
             return section
     return None
 
 
 def append_closed_answer(section, answer):
-    answer_text = (
-        f"{answer}{section.get('answer_suffix', '')}"
-        if section["type"] == "slider"
-        else str(answer).strip()
-    )
+    if section["type"] == "slider":
+        answer_text = f"{answer}{section.get('answer_suffix', '')}"
+    elif section["type"] == "checkboxes_text":
+        selected_options = answer.get("selected_options", [])
+        free_text = answer.get("free_text", "").strip()
+        answer_parts = []
+
+        if selected_options:
+            answer_parts.append("Selected options: " + "; ".join(selected_options))
+        if free_text:
+            answer_parts.append("Other response: " + free_text)
+
+        answer_text = "\n".join(answer_parts)
+    else:
+        answer_text = str(answer).strip()
 
     st.session_state.messages.extend(
         [
@@ -386,22 +490,7 @@ def append_closed_answer(section, answer):
 
 
 def render_closed_question(section):
-    transition_message = {
-        "importance": (
-            "Thanks, that's helpful. We'll now move to the next part of the conversation, "
-            "about how important it is to you to live in a country that is governed democratically."
-        ),
-        "satisfaction": (
-            "Thanks for answering those questions. We'll now move to the next part "
-            "of the conversation, about how satisfied you are with the way democracy "
-            "works in your country."
-        ),
-        "preference": (
-            "Thanks for sharing that. We'll now move to the final main part of the "
-            "conversation, about how you think about democracy compared with other "
-            "forms of government."
-        ),
-    }.get(section["id"])
+    transition_message = section.get("transition")
 
     if transition_message:
         with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
@@ -421,18 +510,53 @@ def render_closed_question(section):
                 step=1,
                 key=f"{section['id']}_slider",
             )
-        else:
+        elif section["type"] == "radio":
             answer = st.radio(
                 section["question"],
                 section["options"],
                 index=None,
                 key=f"{section['id']}_radio",
             )
+        elif section["type"] == "checkboxes_text":
+            st.markdown(section["question"])
+            selected_options = []
+
+            for option_index, option in enumerate(section["options"]):
+                if st.checkbox(
+                    option,
+                    key=f"{section['id']}_checkbox_{option_index}",
+                ):
+                    selected_options.append(option)
+
+            free_text = st.text_area(
+                section.get("text_label", "Other details:"),
+                key=f"{section['id']}_free_text",
+            )
+            answer = {
+                "selected_options": selected_options,
+                "free_text": free_text,
+            }
+        else:
+            raise ValueError(f"Unknown section type: {section['type']}")
 
         submitted = st.form_submit_button("Continue")
 
     if submitted:
-        if answer is None or not str(answer).strip():
+        if section["type"] == "checkboxes_text":
+            selected_options = answer["selected_options"]
+            free_text = answer["free_text"].strip()
+            exclusive_options = set(section.get("exclusive_options", []))
+
+            if not selected_options and not free_text:
+                st.warning("Please write or select an answer before continuing.")
+                st.stop()
+
+            if exclusive_options.intersection(selected_options) and len(selected_options) > 1:
+                st.warning(
+                    "Please select either 'None of these are absolute' or the other options, not both."
+                )
+                st.stop()
+        elif answer is None or not str(answer).strip():
             st.warning("Please write or select an answer before continuing.")
             st.stop()
 
@@ -466,7 +590,7 @@ def render_locked_control(section):
             disabled=True,
             key=f"{section['id']}_locked_slider",
         )
-    else:
+    elif section["type"] == "radio":
         index = section["options"].index(answer) if answer in section["options"] else 0
         st.radio(
             section["question"],
@@ -475,6 +599,30 @@ def render_locked_control(section):
             disabled=True,
             key=f"{section['id']}_locked_radio",
         )
+    elif section["type"] == "checkboxes_text":
+        answer_text = answer or ""
+        st.markdown(section["question"])
+
+        for option_index, option in enumerate(section["options"]):
+            st.checkbox(
+                option,
+                value=option in answer_text,
+                disabled=True,
+                key=f"{section['id']}_locked_checkbox_{option_index}",
+            )
+
+        other_response = ""
+        if "Other response: " in answer_text:
+            other_response = answer_text.split("Other response: ", 1)[1]
+
+        st.text_area(
+            section.get("text_label", "Other details:"),
+            value=other_response,
+            disabled=True,
+            key=f"{section['id']}_locked_free_text",
+        )
+    else:
+        raise ValueError(f"Unknown section type: {section['type']}")
 
 
 def render_section_conversation(section):
@@ -499,8 +647,15 @@ def asks_closed_survey_item(message):
         "how important is it for you to live in a country that is governed democratically",
         "very satisfied, fairly satisfied, not very satisfied",
         "not at all satisfied with the way democracy works",
-        "democracy may have problems",
-        "better than any other form of government",
+        "which areas most shaped your answer about how democracy works",
+        "has your satisfaction with the way democracy works in your country changed over time",
+        "what is more important to you: that a government be democratic even if it is not effective",
+        "that the government be effective even if it is not democratic",
+        "which of the following statements do you agree with most",
+        "democracy is preferable to any other form of government",
+        "authoritarian government may be preferable",
+        "are there any things democratic leaders should not do",
+        "refuse to leave office after losing an election",
     ]
     return any(marker in normalized for marker in closed_item_markers)
 
@@ -512,23 +667,19 @@ def fallback_followup_for_section(section):
     if section["id"] == "meaning":
         if answered == 0:
             return (
-                "When you think about democracy that way, what feels most important "
-                "about it in ordinary political life?"
+                "When you use the word democracy, what kinds of things are you thinking of?"
             )
         return (
-            "Could you give a concrete example of what would make a country feel "
-            "more or less democratic to you?"
+            "Does democracy mean something mainly political to you, or does it also connect to everyday life?"
         )
 
     if section["id"] == "importance":
         if answered == 0:
             return (
-                f"You chose {answer}. What does being governed democratically mean "
-                "to you in practice?"
+                f"You chose {answer}. What makes democracy feel that important, or not important, to you?"
             )
         return (
-            "Could you give a concrete example of the kind of democratic feature "
-            "or problem you had in mind?"
+            "Is your answer more about how decisions are made, the results government produces, or both?"
         )
 
     if section["id"] == "satisfaction":
@@ -538,19 +689,78 @@ def fallback_followup_for_section(section):
                 "your country were most on your mind?"
             )
         return (
-            "Could you say a bit more about a specific experience, institution, "
-            "or event that shaped that view?"
+            "Is that based mostly on recent experiences, or on a longer-term view of how democracy works?"
         )
 
-    if section["id"] == "preference":
+    if section["id"] == "satisfaction_drivers":
         if answered == 0:
+            return "Which of those areas mattered most for your view, and why?"
+        if answered == 1:
             return (
-                f"You selected '{answer}'. What makes democracy seem better, or not "
-                "better, than other forms of government to you?"
+                "Is this based on something you personally experienced, something people around you "
+                "experienced, or a broader impression?"
             )
         return (
-            "What kinds of problems with democracy, or possible alternatives, were "
-            "you comparing in your mind?"
+            "What would a better response from government look like to you?"
+        )
+
+    if section["id"] == "satisfaction_time":
+        if answered == 0:
+            return "What experiences or events made your view change, or helped it stay the same?"
+        return (
+            "Was this shaped mostly by recent events, or by things you learned or experienced earlier in life?"
+        )
+
+    if section["id"] == "effectiveness":
+        if answered == 0:
+            return "What makes that feel like the better option to you?"
+        if answered == 1:
+            return (
+                "Thinking about the issues you raised earlier, what would feel like the right balance "
+                "between getting problems solved and keeping decisions democratic?"
+            )
+        if "effective even if it is not democratic" in str(answer).lower():
+            return (
+                "What would worry you, if anything, about a government solving problems without democratic checks?"
+            )
+        return "When does a slower democratic process still feel worth preserving to you?"
+
+    if section["id"] == "regime_preference":
+        answer_text = str(answer).lower()
+        if "authoritarian" in answer_text:
+            if answered == 0:
+                return "What kinds of circumstances would make an authoritarian government seem preferable?"
+            if answered == 1:
+                return "What would you expect that kind of government to do better?"
+            return (
+                "Some people worry that authoritarian governments may act faster but may also restrict "
+                "people's freedoms or rights. How do you think about that tradeoff?"
+            )
+        if "no difference" in answer_text:
+            if answered == 0:
+                return (
+                    "What makes the type of political system feel like it does not make much difference "
+                    "for people like you?"
+                )
+            if answered == 1:
+                return "What, if anything, could make the type of political system matter more to you?"
+            return "Are there any political rights or protections that would still matter to you personally?"
+        if answered == 0:
+            return "What makes democracy preferable to you, even when it has problems?"
+        if answered == 1:
+            return "Are there situations where democracy's problems make that commitment harder for you?"
+        return "What would make you most concerned that democracy was being weakened?"
+
+    if section["id"] == "red_lines":
+        if answered == 0:
+            return "Which of these feels most important to you, and why?"
+        if answered == 1:
+            return (
+                "Looking back at your earlier answers, how do you think about the boundary between "
+                "wanting better results and preserving democratic rules?"
+            )
+        return (
+            "What would go too far for you, even if a democratic leader promised better results?"
         )
 
     return "Could you tell me a little more about what shaped that answer?"
@@ -607,7 +817,7 @@ def generate_ai_message():
 
 def render_followup_input(section):
     answered = followup_answer_count(section)
-    remaining = MAX_FOLLOWUPS_PER_SECTION - answered
+    remaining = followups_required(section) - answered
     label = "Your answer"
     help_text = (
         f"This section has {remaining} answer"
