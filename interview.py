@@ -256,7 +256,6 @@ FINAL_OPEN_MESSAGE = (
 )
 
 MAX_FOLLOWUPS_PER_SECTION = getattr(config, "MAX_FOLLOWUPS_PER_SECTION", 2)
-CONVERSATIONAL_PAUSE_SECONDS = getattr(config, "CONVERSATIONAL_PAUSE_SECONDS", 0.7)
 CONVERSATIONAL_TEXT_DELAY_SECONDS = getattr(
     config, "CONVERSATIONAL_TEXT_DELAY_SECONDS", 0.035
 )
@@ -585,7 +584,7 @@ def render_closed_question(section):
 
     if transition_message:
         with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-            st.markdown(transition_message)
+            render_typed_interviewer_message(transition_message)
 
     st.markdown(f"### {section['title']}")
 
@@ -935,8 +934,6 @@ def maybe_handle_closing_code(message_interviewer):
 def generate_ai_message():
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         message_placeholder = st.empty()
-        message_placeholder.markdown("Let me think about that for a moment...")
-        time.sleep(CONVERSATIONAL_PAUSE_SECONDS)
         message_interviewer = stream_response(
             client=client,
             client_kwargs=api_kwargs,
