@@ -5,6 +5,7 @@
 
 
 import os
+import hashlib
 import time
 from copy import deepcopy
 
@@ -257,6 +258,22 @@ FINAL_OPEN_MESSAGE = (
 
 MAX_FOLLOWUPS_PER_SECTION = getattr(config, "MAX_FOLLOWUPS_PER_SECTION", 2)
 CONVERSATIONAL_PAUSE_SECONDS = getattr(config, "CONVERSATIONAL_PAUSE_SECONDS", 0.7)
+CONVERSATIONAL_TEXT_DELAY_SECONDS = getattr(
+    config, "CONVERSATIONAL_TEXT_DELAY_SECONDS", 0.035
+)
+CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = getattr(
+    config, "CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS", 0.12
+)
+ENABLE_INTERVIEWER_TTS = getattr(config, "ENABLE_INTERVIEWER_TTS", True)
+TTS_MODEL = getattr(config, "TTS_MODEL", "gpt-4o-mini-tts")
+TTS_VOICE = getattr(config, "TTS_VOICE", getattr(config, "VOICE", "coral"))
+TTS_SPEED = getattr(config, "TTS_SPEED", 0.95)
+TTS_INSTRUCTIONS = getattr(
+    config,
+    "TTS_INSTRUCTIONS",
+    "Speak warmly and naturally, like a thoughtful qualitative interviewer.",
+)
+TYPEWRITER_MAX_CHARS = getattr(config, "TYPEWRITER_MAX_CHARS", 900)
 
 SECTIONS = [
     {
@@ -718,10 +735,120 @@ def render_section_conversation(section):
         )
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
+            if message["role"] == "assistant":
+                render_interviewer_audio(
+                    message["content"],
+                    key_prefix=f"{section['id']}_{hash_text(message['content'])}",
+                )
 
 
 def normalize_text(text):
     return " ".join(str(text).lower().split())
+
+
+def hash_text(text):
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()[:16]
+
+
+class SilentPlaceholder:
+    def markdown(self, *args, **kwargs):
+        return None
+
+    def empty(self):
+        return None
+
+
+def type_text_conversationally(message_placeholder, text):
+    if (
+        CONVERSATIONAL_TEXT_DELAY_SECONDS <= 0
+        or not text
+        or len(text) > TYPEWRITER_MAX_CHARS
+    ):
+        message_placeholder.markdown(text)
+        return
+
+    rendered_text = ""
+    for char in text:
+        rendered_text += char
+        message_placeholder.markdown(rendered_text + "▌")
+        if char in ".?!":
+            time.sleep(CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS)
+        elif char in ",;:":
+            time.sleep(CONVERSATIONAL_TEXT_DELAY_SECONDS * 2)
+        else:
+            time.sleep(CONVERSATIONAL_TEXT_DELAY_SECONDS)
+
+    message_placeholder.markdown(text)
+
+
+def tts_cache_key(message_text):
+    key_parts = [
+        TTS_MODEL,
+        TTS_VOICE,
+        str(TTS_SPEED),
+        TTS_INSTRUCTIONS,
+        message_text,
+    ]
+    return hashlib.sha256("||".join(key_parts).encode("utf-8")).hexdigest()
+
+
+def generate_interviewer_audio(message_text):
+    if not ENABLE_INTERVIEWER_TTS or config.API != "openai":
+        return None
+
+    text = str(message_text).strip()
+    if not text or text in config.CLOSING_MESSAGES or text in config.CLOSING_MESSAGES.values():
+        return None
+
+    text = text[:4000]
+
+    if "tts_audio_cache" not in st.session_state:
+        st.session_state.tts_audio_cache = {}
+
+    cache_key = tts_cache_key(text)
+    if cache_key in st.session_state.tts_audio_cache:
+        return st.session_state.tts_audio_cache[cache_key]
+
+    try:
+        speech_kwargs = {
+            "model": TTS_MODEL,
+            "voice": TTS_VOICE,
+            "input": text,
+            "response_format": "mp3",
+            "speed": TTS_SPEED,
+        }
+        if TTS_INSTRUCTIONS:
+            speech_kwargs["instructions"] = TTS_INSTRUCTIONS
+
+        try:
+            speech_response = client.audio.speech.create(**speech_kwargs)
+        except Exception:
+            if "instructions" not in speech_kwargs:
+                raise
+            speech_kwargs.pop("instructions", None)
+            speech_response = client.audio.speech.create(**speech_kwargs)
+
+        if hasattr(speech_response, "read"):
+            audio_bytes = speech_response.read()
+        elif hasattr(speech_response, "content"):
+            audio_bytes = speech_response.content
+        elif hasattr(speech_response, "iter_bytes"):
+            audio_bytes = b"".join(speech_response.iter_bytes())
+        else:
+            audio_bytes = bytes(speech_response)
+
+        st.session_state.tts_audio_cache[cache_key] = audio_bytes
+        return audio_bytes
+    except Exception:
+        return None
+
+
+def render_interviewer_audio(message_text, key_prefix):
+    audio_bytes = generate_interviewer_audio(message_text)
+    if audio_bytes:
+        st.audio(audio_bytes, format="audio/mp3")
+    elif ENABLE_INTERVIEWER_TTS and config.API == "openai":
+        st.caption("Audio unavailable for this message.")
 
 
 def asks_closed_survey_item(message):
@@ -898,7 +1025,7 @@ def generate_ai_message():
         message_interviewer = stream_response(
             client=client,
             client_kwargs=api_kwargs,
-            message_placeholder=message_placeholder,
+            message_placeholder=SilentPlaceholder(),
         )
 
     maybe_handle_closing_code(message_interviewer)
@@ -909,11 +1036,13 @@ def generate_ai_message():
         or asks_summary_too_early(message_interviewer)
     ):
         message_interviewer = fallback_followup_for_section(section)
-        message_placeholder.markdown(message_interviewer)
+
+    type_text_conversationally(message_placeholder, message_interviewer)
 
     st.session_state.messages.append(
         {"role": "assistant", "content": message_interviewer}
     )
+    generate_interviewer_audio(message_interviewer)
     save_backup(
         backups_directory=config.BACKUPS_DIRECTORY,
         admin_alias=config.ADMIN_ALIAS,
@@ -1017,6 +1146,7 @@ def render_final_open_question():
     st.markdown("### Final Reflections")
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         st.markdown(FINAL_OPEN_MESSAGE)
+        render_interviewer_audio(FINAL_OPEN_MESSAGE, key_prefix="final_open_question")
 
     st.session_state.messages.append(
         {"role": "assistant", "content": FINAL_OPEN_MESSAGE}
@@ -1032,6 +1162,7 @@ def render_final_open_answer_input():
     st.markdown("### Final Reflections")
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         st.markdown(FINAL_OPEN_MESSAGE)
+        render_interviewer_audio(FINAL_OPEN_MESSAGE, key_prefix="final_open_answer")
 
     with st.form("final_open_answer_form"):
         response = st.text_area("Your answer")
@@ -1079,6 +1210,7 @@ section = active_section()
 if not st.session_state.messages:
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         st.markdown(INTRO_MESSAGE)
+        render_interviewer_audio(INTRO_MESSAGE, key_prefix="intro_message")
 
 
 if stage == "final_open_question":
@@ -1129,6 +1261,10 @@ if stage == "evaluation":
         ):
             with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
                 st.markdown(message["content"])
+                render_interviewer_audio(
+                    message["content"],
+                    key_prefix=f"summary_{hash_text(message['content'])}",
+                )
             break
 
     render_summary_rating_input()
