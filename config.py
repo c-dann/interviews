@@ -143,8 +143,8 @@ BACKUPS_DIRECTORY = "./backups/"
 
 
 # Avatars in chat interface
-AVATAR_INTERVIEWER = "\U0001f393"
-AVATAR_RESPONDENT = "🧑"
+AVATAR_INTERVIEWER = "🏛️"
+AVATAR_RESPONDENT = "👤"
 
 
 # Display login screen with usernames and simple passwords for studies
