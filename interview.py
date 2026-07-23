@@ -28,6 +28,57 @@ from utils import (
 
 st.set_page_config(page_title="Interview", page_icon=config.AVATAR_INTERVIEWER)
 
+st.markdown(
+    """
+    <style>
+    .block-container {
+        padding-bottom: 9rem;
+    }
+    .section-end-spacer {
+        height: 7rem;
+    }
+    .summary-page-header {
+        border-bottom: 1px solid #e5e7eb;
+        margin-bottom: 1.25rem;
+        padding-bottom: 1rem;
+    }
+    .summary-page-eyebrow {
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-bottom: 0.25rem;
+    }
+    .summary-page-title {
+        color: #111827;
+        font-size: 1.65rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-bottom: 0.35rem;
+    }
+    .summary-page-subtitle {
+        color: #4b5563;
+        font-size: 0.98rem;
+        line-height: 1.45;
+        max-width: 44rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+CONSENT_FORM = """## Consent form
+
+**This is a survey conducted for academic research purposes by researchers from Stanford University. It will take approximately 20 minutes to complete. The survey data is used for research purposes only, and the research is non-partisan.**
+
+**Part of the survey involves a short conversational interview conducted with a generative artificial intelligence (AI) tool, which will ask you to share your views on a few topics in your own words. You will be compensated for this survey if you complete the survey and your responses pass our survey quality checks. These checks use statistical control methods to detect incoherent and rushed responses. It is very important for the validity of our research that you answer honestly and read the questions carefully before answering.**
+
+**All the answers you provide will remain anonymous and be treated with absolute confidentiality. The personal data we collect will be transferred and stored on secure servers. Only researchers working on the project will have access to the anonymized data. Your participation in this survey is completely voluntary. You are entitled to choose not to take part. If at first you agree to take part, you can later change your mind. Your decision will not be held against you in any way. Your refusal to participate will not result in any consequences or any loss of benefits that you are otherwise entitled to receive. You can ask any questions before you decide whether to participate.**
+
+**Do you agree to participate in the survey?**
+
+***By answering Yes to this question, you confirm that you are 18 years old or over, you have read and understood the explanations above, and you agree to take part in the survey.***"""
+
+
 if config.LOGINS:
     pwd_correct, username = check_password()
     if not pwd_correct:
@@ -35,17 +86,45 @@ if config.LOGINS:
     st.session_state.username = username
 else:
     if "username" not in st.session_state:
-        username_input = st.text_input(
-            "Please enter a username to start the interview:",
-            key="username_input",
-        )
-        if not username_input:
+        st.markdown(CONSENT_FORM)
+
+        with st.form("start_interview_form"):
+            username_input = st.text_input(
+                "Please enter a username to start the interview:",
+                key="username_input",
+            )
+            consent_response = st.radio(
+                "Your response:",
+                ["Yes", "No"],
+                index=None,
+                key="consent_response",
+                horizontal=True,
+            )
+            submitted = st.form_submit_button("Start survey")
+
+        if not submitted:
             st.stop()
+
+        if not username_input:
+            st.warning("Please enter a username before continuing.")
+            st.stop()
+
         if not username_input.strip().isalnum():
             st.warning("Username must be alphanumeric.")
             st.stop()
 
+        if consent_response is None:
+            st.warning("Please select whether you agree to participate.")
+            st.stop()
+
+        if consent_response != "Yes":
+            st.info(
+                "Thank you. You have not agreed to participate, so the survey will not begin."
+            )
+            st.stop()
+
         st.session_state.username = username_input.strip()
+        st.session_state.consent_given = True
         st.rerun()
 
 
@@ -660,6 +739,19 @@ def asks_closed_survey_item(message):
     return any(marker in normalized for marker in closed_item_markers)
 
 
+def asks_summary_too_early(message):
+    normalized = normalize_text(message)
+    summary_markers = [
+        "here is a summary",
+        "summary of your views",
+        "summary of our discussion",
+        "based on our conversation",
+        "how well does the summary",
+        "to conclude, how well",
+    ]
+    return any(marker in normalized for marker in summary_markers)
+
+
 def fallback_followup_for_section(section):
     answer = closed_answer(section)
     answered = followup_answer_count(section)
@@ -801,7 +893,10 @@ def generate_ai_message():
     maybe_handle_closing_code(message_interviewer)
 
     section = active_section()
-    if section is not None and asks_closed_survey_item(message_interviewer):
+    if section is not None and (
+        asks_closed_survey_item(message_interviewer)
+        or asks_summary_too_early(message_interviewer)
+    ):
         message_interviewer = fallback_followup_for_section(section)
         message_placeholder.markdown(message_interviewer)
 
@@ -879,6 +974,34 @@ def render_summary_rating_input():
         st.rerun()
 
 
+def render_summary_page_header(is_review=False):
+    eyebrow = "Final Review" if is_review else "Preparing Summary"
+    title = "Review Your Interview Summary" if is_review else "Summary"
+    subtitle = (
+        "Please read the summary below, then rate how well it describes your views."
+        if is_review
+        else (
+            "Thanks. Your interview responses are complete. The interviewer is now "
+            "preparing a short summary for you to review."
+        )
+    )
+
+    st.markdown(
+        f"""
+        <div class="summary-page-header">
+            <div class="summary-page-eyebrow">{eyebrow}</div>
+            <div class="summary-page-title">{title}</div>
+            <div class="summary-page-subtitle">{subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_bottom_spacer():
+    st.markdown('<div class="section-end-spacer"></div>', unsafe_allow_html=True)
+
+
 def render_final_open_question():
     st.markdown("### Final Reflections")
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
@@ -949,16 +1072,19 @@ if not st.session_state.messages:
 
 if stage == "final_open_question":
     render_final_open_question()
+    render_bottom_spacer()
     st.stop()
 
 
 if stage == "final_open_answer":
     render_final_open_answer_input()
+    render_bottom_spacer()
     st.stop()
 
 
 if stage.endswith("_question"):
     render_closed_question(section)
+    render_bottom_spacer()
     st.stop()
 
 
@@ -970,18 +1096,20 @@ if stage.endswith("_followup"):
         generate_ai_message()
 
     render_followup_input(section)
+    render_bottom_spacer()
     st.stop()
 
 
 if stage == "summary":
-    st.markdown("### Summary")
+    render_summary_page_header(is_review=False)
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         generate_ai_message()
+    render_bottom_spacer()
     st.stop()
 
 
 if stage == "evaluation":
-    st.markdown("### Summary")
+    render_summary_page_header(is_review=True)
     for message in st.session_state.messages:
         if (
             message["role"] == "assistant"
@@ -993,4 +1121,5 @@ if stage == "evaluation":
             break
 
     render_summary_rating_input()
+    render_bottom_spacer()
     st.stop()
