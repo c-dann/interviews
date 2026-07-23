@@ -174,7 +174,6 @@ ADDITIONAL_API_KWARGS = {}
 # This is the default. The main democracy app overrides it for richer sections
 # such as satisfaction drivers, democracy versus effectiveness, and red lines.
 MAX_FOLLOWUPS_PER_SECTION = 2
-CONVERSATIONAL_PAUSE_SECONDS = 0.7
 CONVERSATIONAL_TEXT_DELAY_SECONDS = 0.03
 CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = 0.12
 TYPEWRITER_MAX_CHARS = 900
