@@ -1124,6 +1124,11 @@ section = active_section()
 if not st.session_state.messages:
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         render_typed_interviewer_message(INTRO_MESSAGE)
+    st.session_state.messages.append({"role": "assistant", "content": INTRO_MESSAGE})
+    save_backup(
+        backups_directory=config.BACKUPS_DIRECTORY,
+        admin_alias=config.ADMIN_ALIAS,
+    )
 
 
 if stage == "final_open_question":
