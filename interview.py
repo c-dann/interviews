@@ -1086,13 +1086,13 @@ def render_section_transition(section):
         st.rerun()
 
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-        render_typed_interviewer_message(
-            transition_message,
-            message_key=f"transition_{section['id']}",
-        )
+        st.markdown(transition_message)
 
-    mark_transition_shown(section)
-    st.rerun()
+    if st.button("Continue", key=f"continue_transition_{section['id']}"):
+        mark_transition_shown(section)
+        st.rerun()
+
+    render_bottom_spacer()
 
 
 def render_final_open_question():
