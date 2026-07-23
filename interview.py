@@ -165,6 +165,17 @@ INTRO_MESSAGE = (
     "Thank you for taking part in this interview. I'm interested in your views in your own words."
 )
 
+FINAL_OPEN_QUESTION = (
+    "Thinking back over our conversation, is there anything important about your views on democracy "
+    "that you feel we have not covered, or that you would like to add?"
+)
+
+FINAL_OPEN_MESSAGE = (
+    "Thanks for working through those questions. We're nearing the end of the interview. "
+    "Before I summarize our conversation, I have one final question:\n\n"
+    f"{FINAL_OPEN_QUESTION}"
+)
+
 MAX_FOLLOWUPS_PER_SECTION = getattr(config, "MAX_FOLLOWUPS_PER_SECTION", 2)
 
 SECTIONS = [
@@ -244,7 +255,14 @@ def next_section_start_index(section):
         if later_start is not None and later_start > start_index:
             later_starts.append(later_start)
 
-    return min(later_starts) if later_starts else len(st.session_state.messages)
+    if later_starts:
+        return min(later_starts)
+
+    final_question_index = final_open_question_index()
+    if final_question_index is not None and final_question_index > start_index:
+        return final_question_index
+
+    return len(st.session_state.messages)
 
 
 def section_messages(section):
@@ -289,11 +307,36 @@ def summary_has_been_asked():
     )
 
 
+def final_open_question_index():
+    for index, message in enumerate(st.session_state.messages):
+        if (
+            message["role"] == "assistant"
+            and FINAL_OPEN_QUESTION in message["content"]
+        ):
+            return index
+    return None
+
+
+def final_open_question_has_been_answered():
+    question_index = final_open_question_index()
+    if question_index is None:
+        return False
+
+    return any(
+        message["role"] == "user"
+        for message in st.session_state.messages[question_index + 1 :]
+    )
+
+
 def current_stage():
     if not st.session_state.messages:
         return "importance_question"
 
     if all_section_followups_complete():
+        if final_open_question_index() is None:
+            return "final_open_question"
+        if not final_open_question_has_been_answered():
+            return "final_open_answer"
         return "evaluation" if summary_has_been_asked() else "summary"
 
     for index, section in enumerate(SECTIONS):
@@ -337,6 +380,23 @@ def append_closed_answer(section, answer):
 
 
 def render_closed_question(section):
+    transition_message = {
+        "satisfaction": (
+            "Thanks for answering those questions. We'll now move to the next part "
+            "of the conversation, about how satisfied you are with the way democracy "
+            "works in your country."
+        ),
+        "preference": (
+            "Thanks for sharing that. We'll now move to the final main part of the "
+            "conversation, about how you think about democracy compared with other "
+            "forms of government."
+        ),
+    }.get(section["id"])
+
+    if transition_message:
+        with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+            st.markdown(transition_message)
+
     st.markdown(f"### {section['title']}")
 
     with st.form(f"{section['id']}_closed_form"):
@@ -578,6 +638,46 @@ def render_summary_rating_input():
         st.rerun()
 
 
+def render_final_open_question():
+    st.markdown("### Final Reflections")
+    with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+        st.markdown(FINAL_OPEN_MESSAGE)
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": FINAL_OPEN_MESSAGE}
+    )
+    save_backup(
+        backups_directory=config.BACKUPS_DIRECTORY,
+        admin_alias=config.ADMIN_ALIAS,
+    )
+    st.rerun()
+
+
+def render_final_open_answer_input():
+    st.markdown("### Final Reflections")
+    with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+        st.markdown(FINAL_OPEN_MESSAGE)
+
+    with st.form("final_open_answer_form"):
+        response = st.text_area("Your answer")
+        submitted = st.form_submit_button("Continue")
+
+    if submitted:
+        if not response.strip():
+            st.warning("Please write an answer before continuing.")
+            st.stop()
+
+        st.session_state.messages.append(
+            {"role": "user", "content": response.strip()}
+        )
+        st.session_state.num_text_and_voice_answers[0] += 1
+        save_backup(
+            backups_directory=config.BACKUPS_DIRECTORY,
+            admin_alias=config.ADMIN_ALIAS,
+        )
+        st.rerun()
+
+
 #
 # 3. Render interview
 #
@@ -626,6 +726,16 @@ if stage == "summary":
     st.markdown("### Summary")
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         generate_ai_message()
+    st.stop()
+
+
+if stage == "final_open_question":
+    render_final_open_question()
+    st.stop()
+
+
+if stage == "final_open_answer":
+    render_final_open_answer_input()
     st.stop()
 
 
