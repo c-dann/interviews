@@ -741,6 +741,7 @@ def render_section_conversation(section):
                 render_interviewer_audio(
                     message["content"],
                     key_prefix=f"{section['id']}_{hash_text(message['content'])}",
+                    autoplay=False,
                 )
 
 
@@ -845,10 +846,12 @@ def generate_interviewer_audio(message_text):
         return None
 
 
-def render_interviewer_audio(message_text, key_prefix):
+def render_interviewer_audio(message_text, key_prefix, autoplay=None):
     audio_bytes = generate_interviewer_audio(message_text)
     if audio_bytes:
-        if AUTOPLAY_INTERVIEWER_AUDIO:
+        should_autoplay = AUTOPLAY_INTERVIEWER_AUDIO if autoplay is None else autoplay
+
+        if should_autoplay:
             audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
             st.markdown(
                 f"""
@@ -862,6 +865,12 @@ def render_interviewer_audio(message_text, key_prefix):
             st.audio(audio_bytes, format="audio/mp3")
     elif ENABLE_INTERVIEWER_TTS and config.API == "openai":
         st.caption("Audio unavailable for this message.")
+
+
+def render_live_interviewer_message(message_text, key_prefix):
+    render_interviewer_audio(message_text, key_prefix=key_prefix, autoplay=True)
+    message_placeholder = st.empty()
+    type_text_conversationally(message_placeholder, message_text)
 
 
 def asks_closed_survey_item(message):
@@ -1034,28 +1043,33 @@ def generate_ai_message():
         message_placeholder = st.empty()
         message_placeholder.markdown("Let me think about that for a moment...")
         time.sleep(CONVERSATIONAL_PAUSE_SECONDS)
-        message_placeholder.empty()
         message_interviewer = stream_response(
             client=client,
             client_kwargs=api_kwargs,
             message_placeholder=SilentPlaceholder(),
         )
 
-    maybe_handle_closing_code(message_interviewer)
+        maybe_handle_closing_code(message_interviewer)
 
-    section = active_section()
-    if section is not None and (
-        asks_closed_survey_item(message_interviewer)
-        or asks_summary_too_early(message_interviewer)
-    ):
-        message_interviewer = fallback_followup_for_section(section)
+        section = active_section()
+        if section is not None and (
+            asks_closed_survey_item(message_interviewer)
+            or asks_summary_too_early(message_interviewer)
+        ):
+            message_interviewer = fallback_followup_for_section(section)
 
-    type_text_conversationally(message_placeholder, message_interviewer)
+        render_interviewer_audio(
+            message_interviewer,
+            key_prefix=f"live_{hash_text(message_interviewer)}",
+            autoplay=True,
+        )
+        message_placeholder.empty()
+        text_placeholder = st.empty()
+        type_text_conversationally(text_placeholder, message_interviewer)
 
     st.session_state.messages.append(
         {"role": "assistant", "content": message_interviewer}
     )
-    generate_interviewer_audio(message_interviewer)
     save_backup(
         backups_directory=config.BACKUPS_DIRECTORY,
         admin_alias=config.ADMIN_ALIAS,
@@ -1158,8 +1172,10 @@ def render_bottom_spacer():
 def render_final_open_question():
     st.markdown("### Final Reflections")
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-        st.markdown(FINAL_OPEN_MESSAGE)
-        render_interviewer_audio(FINAL_OPEN_MESSAGE, key_prefix="final_open_question")
+        render_live_interviewer_message(
+            FINAL_OPEN_MESSAGE,
+            key_prefix="final_open_question",
+        )
 
     st.session_state.messages.append(
         {"role": "assistant", "content": FINAL_OPEN_MESSAGE}
@@ -1175,7 +1191,11 @@ def render_final_open_answer_input():
     st.markdown("### Final Reflections")
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
         st.markdown(FINAL_OPEN_MESSAGE)
-        render_interviewer_audio(FINAL_OPEN_MESSAGE, key_prefix="final_open_answer")
+        render_interviewer_audio(
+            FINAL_OPEN_MESSAGE,
+            key_prefix="final_open_answer",
+            autoplay=False,
+        )
 
     with st.form("final_open_answer_form"):
         response = st.text_area("Your answer")
@@ -1222,8 +1242,7 @@ section = active_section()
 
 if not st.session_state.messages:
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-        st.markdown(INTRO_MESSAGE)
-        render_interviewer_audio(INTRO_MESSAGE, key_prefix="intro_message")
+        render_live_interviewer_message(INTRO_MESSAGE, key_prefix="intro_message")
 
 
 if stage == "final_open_question":
@@ -1277,6 +1296,7 @@ if stage == "evaluation":
                 render_interviewer_audio(
                     message["content"],
                     key_prefix=f"summary_{hash_text(message['content'])}",
+                    autoplay=False,
                 )
             break
 
