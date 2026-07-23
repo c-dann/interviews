@@ -409,6 +409,62 @@ def render_section_conversation(section):
             st.markdown(message["content"])
 
 
+def normalize_text(text):
+    return " ".join(str(text).lower().split())
+
+
+def asks_closed_survey_item(message):
+    normalized = normalize_text(message)
+    closed_item_markers = [
+        "how important is it for you to live in a country that is governed democratically",
+        "very satisfied, fairly satisfied, not very satisfied",
+        "not at all satisfied with the way democracy works",
+        "democracy may have problems",
+        "better than any other form of government",
+    ]
+    return any(marker in normalized for marker in closed_item_markers)
+
+
+def fallback_followup_for_section(section):
+    answer = closed_answer(section)
+    answered = followup_answer_count(section)
+
+    if section["id"] == "importance":
+        if answered == 0:
+            return (
+                f"You chose {answer}. What does being governed democratically mean "
+                "to you in practice?"
+            )
+        return (
+            "Could you give a concrete example of the kind of democratic feature "
+            "or problem you had in mind?"
+        )
+
+    if section["id"] == "satisfaction":
+        if answered == 0:
+            return (
+                f"You selected '{answer}'. What aspects of how democracy works in "
+                "your country were most on your mind?"
+            )
+        return (
+            "Could you say a bit more about a specific experience, institution, "
+            "or event that shaped that view?"
+        )
+
+    if section["id"] == "preference":
+        if answered == 0:
+            return (
+                f"You selected '{answer}'. What makes democracy seem better, or not "
+                "better, than other forms of government to you?"
+            )
+        return (
+            "What kinds of problems with democracy, or possible alternatives, were "
+            "you comparing in your mind?"
+        )
+
+    return "Could you tell me a little more about what shaped that answer?"
+
+
 def maybe_handle_closing_code(message_interviewer):
     for code, closing_message in config.CLOSING_MESSAGES.items():
         if code in message_interviewer:
@@ -442,6 +498,11 @@ def generate_ai_message():
         )
 
     maybe_handle_closing_code(message_interviewer)
+
+    section = active_section()
+    if section is not None and asks_closed_survey_item(message_interviewer):
+        message_interviewer = fallback_followup_for_section(section)
+        message_placeholder.markdown(message_interviewer)
 
     st.session_state.messages.append(
         {"role": "assistant", "content": message_interviewer}
