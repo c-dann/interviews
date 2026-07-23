@@ -737,6 +737,16 @@ if not st.session_state.messages:
         st.markdown(INTRO_MESSAGE)
 
 
+if stage == "final_open_question":
+    render_final_open_question()
+    st.stop()
+
+
+if stage == "final_open_answer":
+    render_final_open_answer_input()
+    st.stop()
+
+
 if stage.endswith("_question"):
     render_closed_question(section)
     st.stop()
@@ -757,16 +767,6 @@ if stage == "summary":
     st.markdown("### Summary")
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         generate_ai_message()
-    st.stop()
-
-
-if stage == "final_open_question":
-    render_final_open_question()
-    st.stop()
-
-
-if stage == "final_open_answer":
-    render_final_open_answer_input()
     st.stop()
 
 
