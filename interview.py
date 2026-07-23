@@ -518,6 +518,18 @@ def final_open_question_has_been_answered():
     )
 
 
+def transition_state_key(section):
+    return f"section_transition_shown_{section['id']}"
+
+
+def transition_has_been_shown(section):
+    return st.session_state.get(transition_state_key(section), False)
+
+
+def mark_transition_shown(section):
+    st.session_state[transition_state_key(section)] = True
+
+
 def current_stage():
     if not st.session_state.messages:
         return "meaning_question"
@@ -531,13 +543,18 @@ def current_stage():
 
     for index, section in enumerate(SECTIONS):
         if section_start_index(section) is None:
+            if section.get("transition") and not transition_has_been_shown(section):
+                return f"{section['id']}_transition"
             return f"{section['id']}_question"
 
         if followup_answer_count(section) < followups_required(section):
             return f"{section['id']}_followup"
 
         if index + 1 < len(SECTIONS) and section_start_index(SECTIONS[index + 1]) is None:
-            return f"{SECTIONS[index + 1]['id']}_question"
+            next_section = SECTIONS[index + 1]
+            if next_section.get("transition") and not transition_has_been_shown(next_section):
+                return f"{next_section['id']}_transition"
+            return f"{next_section['id']}_question"
 
     return "summary"
 
@@ -545,7 +562,11 @@ def current_stage():
 def active_section():
     stage = current_stage()
     for section in SECTIONS:
-        if stage in (f"{section['id']}_question", f"{section['id']}_followup"):
+        if stage in (
+            f"{section['id']}_transition",
+            f"{section['id']}_question",
+            f"{section['id']}_followup",
+        ):
             return section
     return None
 
@@ -580,12 +601,6 @@ def append_closed_answer(section, answer):
 
 
 def render_closed_question(section):
-    transition_message = section.get("transition")
-
-    if transition_message:
-        with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-            render_typed_interviewer_message(transition_message)
-
     st.markdown(f"### {section['title']}")
 
     with st.form(f"{section['id']}_closed_form"):
@@ -761,9 +776,18 @@ def type_text_conversationally(message_placeholder, text):
     message_placeholder.markdown(text)
 
 
-def render_typed_interviewer_message(message_text):
+def render_typed_interviewer_message(message_text, message_key=None):
+    if message_key:
+        typed_state_key = f"typed_interviewer_message_{message_key}"
+        if st.session_state.get(typed_state_key):
+            st.markdown(message_text)
+            return
+
     message_placeholder = st.empty()
     type_text_conversationally(message_placeholder, message_text)
+
+    if message_key:
+        st.session_state[typed_state_key] = True
 
 
 def asks_closed_survey_item(message):
@@ -1055,10 +1079,29 @@ def render_bottom_spacer():
     st.markdown('<div class="section-end-spacer"></div>', unsafe_allow_html=True)
 
 
+def render_section_transition(section):
+    transition_message = section.get("transition")
+    if not transition_message:
+        mark_transition_shown(section)
+        st.rerun()
+
+    with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+        render_typed_interviewer_message(
+            transition_message,
+            message_key=f"transition_{section['id']}",
+        )
+
+    mark_transition_shown(section)
+    st.rerun()
+
+
 def render_final_open_question():
     st.markdown("### Final Reflections")
     with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-        render_typed_interviewer_message(FINAL_OPEN_MESSAGE)
+        render_typed_interviewer_message(
+            FINAL_OPEN_MESSAGE,
+            message_key="final_open_question",
+        )
 
     st.session_state.messages.append(
         {"role": "assistant", "content": FINAL_OPEN_MESSAGE}
@@ -1115,69 +1158,84 @@ if not st.session_state.interview_active:
     st.stop()
 
 
+def render_interview_stage(stage, section):
+    if not st.session_state.messages:
+        with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+            render_typed_interviewer_message(
+                INTRO_MESSAGE,
+                message_key="intro_message",
+            )
+        st.session_state.messages.append(
+            {"role": "assistant", "content": INTRO_MESSAGE}
+        )
+        save_backup(
+            backups_directory=config.BACKUPS_DIRECTORY,
+            admin_alias=config.ADMIN_ALIAS,
+        )
+
+    if stage == "final_open_question":
+        render_final_open_question()
+        render_bottom_spacer()
+        st.stop()
+
+    if stage == "final_open_answer":
+        render_final_open_answer_input()
+        render_bottom_spacer()
+        st.stop()
+
+    if stage.endswith("_transition"):
+        render_section_transition(section)
+        st.stop()
+
+    if stage.endswith("_question"):
+        render_closed_question(section)
+        render_bottom_spacer()
+        st.stop()
+
+    if stage.endswith("_followup"):
+        render_locked_control(section)
+        render_section_conversation(section)
+
+        if (
+            st.session_state.messages
+            and st.session_state.messages[-1]["role"] == "user"
+        ):
+            generate_ai_message()
+
+        render_followup_input(section)
+        render_bottom_spacer()
+        st.stop()
+
+    if stage == "summary":
+        render_summary_page_header(is_review=False)
+        if (
+            st.session_state.messages
+            and st.session_state.messages[-1]["role"] == "user"
+        ):
+            generate_ai_message()
+        render_bottom_spacer()
+        st.stop()
+
+    if stage == "evaluation":
+        render_summary_page_header(is_review=True)
+        for message in st.session_state.messages:
+            if (
+                message["role"] == "assistant"
+                and "how well does the summary of our discussion describe your views about democracy"
+                in message["content"].lower()
+            ):
+                with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
+                    st.markdown(message["content"])
+                break
+
+        render_summary_rating_input()
+        render_bottom_spacer()
+        st.stop()
+
+
 stage = current_stage()
 section = active_section()
+interview_body = st.empty()
 
-if not st.session_state.messages:
-    with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-        render_typed_interviewer_message(INTRO_MESSAGE)
-    st.session_state.messages.append({"role": "assistant", "content": INTRO_MESSAGE})
-    save_backup(
-        backups_directory=config.BACKUPS_DIRECTORY,
-        admin_alias=config.ADMIN_ALIAS,
-    )
-
-
-if stage == "final_open_question":
-    render_final_open_question()
-    render_bottom_spacer()
-    st.stop()
-
-
-if stage == "final_open_answer":
-    render_final_open_answer_input()
-    render_bottom_spacer()
-    st.stop()
-
-
-if stage.endswith("_question"):
-    render_closed_question(section)
-    render_bottom_spacer()
-    st.stop()
-
-
-if stage.endswith("_followup"):
-    render_locked_control(section)
-    render_section_conversation(section)
-
-    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        generate_ai_message()
-
-    render_followup_input(section)
-    render_bottom_spacer()
-    st.stop()
-
-
-if stage == "summary":
-    render_summary_page_header(is_review=False)
-    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        generate_ai_message()
-    render_bottom_spacer()
-    st.stop()
-
-
-if stage == "evaluation":
-    render_summary_page_header(is_review=True)
-    for message in st.session_state.messages:
-        if (
-            message["role"] == "assistant"
-            and "how well does the summary of our discussion describe your views about democracy"
-            in message["content"].lower()
-        ):
-            with st.chat_message("assistant", avatar=config.AVATAR_INTERVIEWER):
-                st.markdown(message["content"])
-            break
-
-    render_summary_rating_input()
-    render_bottom_spacer()
-    st.stop()
+with interview_body.container():
+    render_interview_stage(stage, section)
