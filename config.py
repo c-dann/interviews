@@ -185,16 +185,17 @@ ADDITIONAL_API_KWARGS = {}
 # such as satisfaction drivers, democracy versus effectiveness, and red lines.
 MAX_FOLLOWUPS_PER_SECTION = 2
 CONVERSATIONAL_PAUSE_SECONDS = 0.7
-CONVERSATIONAL_TEXT_DELAY_SECONDS = 0.045
-CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = 0.18
+CONVERSATIONAL_TEXT_DELAY_SECONDS = 0.03
+CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = 0.12
 TYPEWRITER_MAX_CHARS = 900
 ENABLE_INTERVIEWER_TTS = True
+AUTOPLAY_INTERVIEWER_AUDIO = True
 TTS_MODEL = "gpt-4o-mini-tts"
 TTS_VOICE = "coral"
-TTS_SPEED = 0.95
+TTS_SPEED = 1.05
 TTS_INSTRUCTIONS = (
     "Speak warmly and naturally, like a thoughtful qualitative interviewer. "
-    "Use a calm, conversational pace."
+    "Use a natural conversational pace."
 )
 ALLOW_REPEAT_DEMO_INTERVIEWS = True
 #
