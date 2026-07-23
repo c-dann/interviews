@@ -200,6 +200,77 @@ if "voice" in config.INPUT_MODE:
 # Define a container for the chat history
 transcript_container = st.container()
 
+# Closed-ended democracy items before the AI-led follow-up interview
+if not st.session_state.messages and st.session_state.interview_active and "democracy_items_done" not in st.session_state:
+    st.markdown("### Democratic Attitudes")
+    st.markdown("Please answer these standard survey questions before starting the conversation.")
+
+    with st.form("democracy_items_form"):
+        democracy_importance = st.slider(
+            "How important is it for you to live in a country that is governed democratically? "
+            "On this scale where 0 means it is not at all important and 10 means absolutely important, "
+            "what position would you choose?",
+            min_value=0,
+            max_value=10,
+            value=5,
+            step=1,
+        )
+
+        democracy_satisfaction = st.radio(
+            "On the whole, how satisfied are you with the way democracy works in your country?",
+            [
+                "Very satisfied",
+                "Fairly satisfied",
+                "Not very satisfied",
+                "Not at all satisfied",
+            ],
+            index=None,
+        )
+
+        democracy_preference = st.radio(
+            "Democracy may have problems, but it is better than any other form of government.",
+            [
+                "Strongly agree",
+                "Agree",
+                "Neither agree nor disagree",
+                "Disagree",
+                "Strongly disagree",
+            ],
+            index=None,
+        )
+
+        submitted = st.form_submit_button("Start conversation")
+
+    if submitted:
+        if democracy_satisfaction is None or democracy_preference is None:
+            st.warning("Please answer all three questions before starting the conversation.")
+            st.stop()
+
+        st.session_state.democracy_items_done = True
+        st.session_state.democracy_importance = democracy_importance
+        st.session_state.democracy_satisfaction = democracy_satisfaction
+        st.session_state.democracy_preference = democracy_preference
+
+        opening_message = (
+            "Hello! I'm glad to have the opportunity to speak with you today about democracy and political life. "
+            "Thank you for taking part in this interview. I'm interested in your views in your own words.\n\n"
+            f"You selected {democracy_importance} out of 10 for how important it is to live in a country that is governed democratically. "
+            "What were you thinking about when you chose that answer?"
+        )
+
+        st.session_state.messages = [
+            {"role": "assistant", "content": opening_message}
+        ]
+
+        save_backup(
+            backups_directory=config.BACKUPS_DIRECTORY,
+            admin_alias=config.ADMIN_ALIAS,
+        )
+
+        st.rerun()
+
+    st.stop()
+
 # In case the interview history is still empty, pass system prompt to model and
 # generate and display the first message
 if not st.session_state.messages and st.session_state.interview_active:
