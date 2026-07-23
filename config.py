@@ -185,6 +185,17 @@ ADDITIONAL_API_KWARGS = {}
 # such as satisfaction drivers, democracy versus effectiveness, and red lines.
 MAX_FOLLOWUPS_PER_SECTION = 2
 CONVERSATIONAL_PAUSE_SECONDS = 0.7
+CONVERSATIONAL_TEXT_DELAY_SECONDS = 0.045
+CONVERSATIONAL_PUNCTUATION_DELAY_SECONDS = 0.18
+TYPEWRITER_MAX_CHARS = 900
+ENABLE_INTERVIEWER_TTS = True
+TTS_MODEL = "gpt-4o-mini-tts"
+TTS_VOICE = "coral"
+TTS_SPEED = 0.95
+TTS_INSTRUCTIONS = (
+    "Speak warmly and naturally, like a thoughtful qualitative interviewer. "
+    "Use a calm, conversational pace."
+)
 ALLOW_REPEAT_DEMO_INTERVIEWS = True
 #
 # The following are a few examples for different APIs and models:
